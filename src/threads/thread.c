@@ -310,6 +310,7 @@ thread_yield (void)
   
   ASSERT (!intr_context ());
 
+  printf("Yield: thread %s at tick %d.\n", cur->name, timer_ticks()); // print yield info, azazo1.
   old_level = intr_disable ();
   if (cur != idle_thread) 
     list_insert_ordered (&ready_list, &cur->elem, priority_cmp_func, NULL);
@@ -317,6 +318,38 @@ thread_yield (void)
   schedule ();
   intr_set_level (old_level);
 }
+
+void thread_sleep(int64_t ticks) {
+    if (ticks <= 0) return;
+    struct thread *cur = thread_current();
+
+    enum intr_level old_level = intr_disable();
+
+    if (cur != idle_thread) {
+        cur->status = THREAD_SLEEP;
+        cur->wake_time = timer_ticks() + ticks;
+        schedule();
+    }
+
+    intr_set_level(old_level);
+}
+
+void check_and_wake_up_sleep_thread(void) {
+    struct list_elem *e = list_begin(&all_list);
+    int64_t cur_ticks = timer_ticks();
+    while (e != list_end(&all_list)) {
+        struct thread *t = list_entry(e, struct thread, allelem);
+        enum intr_level old_level = intr_disable();
+        if (t->status == THREAD_SLEEP && cur_ticks >= t->wake_time) {
+            t->status = THREAD_READY;
+            list_insert_ordered(&ready_list, &t->elem, priority_cmp_func, NULL);
+            printf("Wake up thread %s at tick %lld.\n", t->name, cur_ticks);
+        }
+        e = list_next(e);
+        intr_set_level(old_level);
+    }
+}
+
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
@@ -595,3 +628,4 @@ priority_cmp_func(const struct list_elem *a,
     struct thread* tb = list_entry(b, struct thread, elem);
     return tb->priority < ta->priority;
 }
+

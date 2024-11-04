@@ -9,9 +9,11 @@
 #include "threads/thread.h"
 #include "devices/timer.h"
 
+#define THREAD_NUM 10
+
 static thread_func alarm_priority_thread;
-static int64_t wake_time;
 static struct semaphore wait_sema;
+static int64_t wake_time; 
 
 void
 test_alarm_priority (void) 
@@ -24,9 +26,9 @@ test_alarm_priority (void)
   wake_time = timer_ticks () + 5 * TIMER_FREQ;
   sema_init (&wait_sema, 0);
   
-  for (i = 0; i < 10; i++) 
+  for (i = 0; i < THREAD_NUM; i++) 
     {
-      int priority = PRI_DEFAULT - (i + 5) % 10 - 1;
+      int priority = PRI_DEFAULT - (i + 5) % THREAD_NUM - 1;
       char name[16];
       snprintf (name, sizeof name, "priority %d", priority);
       thread_create (name, priority, alarm_priority_thread, NULL);
@@ -39,7 +41,7 @@ test_alarm_priority (void)
 }
 
 static void
-alarm_priority_thread (void *aux UNUSED) 
+alarm_priority_thread (void *aux) 
 {
   /* Busy-wait until the current time changes. */
   int64_t start_time = timer_ticks ();
