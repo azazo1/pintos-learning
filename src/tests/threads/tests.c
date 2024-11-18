@@ -11,7 +11,8 @@ struct test
 
 static const struct test tests[] = 
   {
-      {"hello-world", test_hello_world},
+    {"hello-world", test_hello_world},
+    {"sleep-and-preempt", test_sleep_and_preempt},
     {"alarm-single", test_alarm_single},
     {"alarm-multiple", test_alarm_multiple},
     {"alarm-simultaneous", test_alarm_simultaneous},
