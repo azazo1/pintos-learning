@@ -328,11 +328,12 @@ void thread_sleep(int64_t ticks) {
 
     printf("thread %d-%s sleep %lld ticks.\n", t->tid, t->name, ticks);
 
-    enum intr_level old_level = intr_disable();
     t->status = THREAD_SLEEPING;
     t->wake_time = timer_ticks() + ticks;
-    list_remove(&t->elem);
+    // list_remove(&t->elem);
     list_push_back(&sleep_list, &t->sleep_elem);
+
+    enum intr_level old_level = intr_disable();
     schedule();
     intr_set_level(old_level);
 }
