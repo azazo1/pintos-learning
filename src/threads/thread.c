@@ -352,7 +352,7 @@ void check_and_wakeup_threads(void) {
             t->wake_time = 0;
             list_remove(&t->sleep_elem);
             list_insert_ordered(&ready_list, &t->elem, priority_cmp_func, NULL);
-            if (t->priority > running_thread()->priority) {
+            if (t->priority < running_thread()->priority) {
                 intr_yield_on_return();
             }
         }
