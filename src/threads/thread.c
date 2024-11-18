@@ -326,7 +326,7 @@ thread_yield (void)
 void thread_sleep(int64_t ticks) {
     struct thread *t = thread_current();
 
-    printf("thread %d-%s sleep %lld ticks.\n", t->tid, t->name, ticks);
+    printf("thread %d-%s starts sleep for %lld ticks on %lld ticks.\n", t->tid, t->name, ticks, timer_ticks());
 
     t->status = THREAD_SLEEPING;
     t->wake_time = timer_ticks() + ticks;
@@ -347,6 +347,7 @@ void check_and_wakeup_threads(void) {
         t = list_entry(e, struct thread, sleep_elem);
         ASSERT(t->status == THREAD_SLEEPING);
         if (t->wake_time <= timer_ticks()) {
+            printf("wake thread %d-%s on %lld ticks.\n", t->tid, t->name, timer_ticks());
             t->status = THREAD_READY;
             t->wake_time = 0;
             list_remove(&t->sleep_elem);
