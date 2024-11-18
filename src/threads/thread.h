@@ -11,7 +11,8 @@ enum thread_status
     THREAD_RUNNING,     /* Running thread. */
     THREAD_READY,       /* Not running but ready to run. */
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-    THREAD_DYING        /* About to be destroyed. */
+    THREAD_DYING,        /* About to be destroyed. */
+    THREAD_SLEEPING, /* Sleeping */
   };
 
 /* Thread identifier type.
@@ -100,6 +101,10 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+    /* Decides when to be woken up the thread. */
+    int64_t wake_time;
+    /* Used for sleep_list. */
+    struct list_elem sleep_elem;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -125,6 +130,8 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+void thread_sleep(int64_t ticks);
+void check_and_wakeup_threads(void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
