@@ -310,7 +310,7 @@ thread_yield (void)
   
   ASSERT (!intr_context ());
 
-  printf("Yield: thread %s at tick %d.\n", cur->name, timer_ticks()); // print yield info, azazo1.
+//  printf("Yield: thread %s at tick %d.\n", cur->name, timer_ticks()); // print yield info, azazo1.
   old_level = intr_disable ();
   if (cur != idle_thread) 
     list_insert_ordered (&ready_list, &cur->elem, priority_cmp_func, NULL);
@@ -343,7 +343,7 @@ void check_and_wake_up_sleep_thread(void) {
         if (t->status == THREAD_SLEEP && cur_ticks >= t->wake_time) {
             t->status = THREAD_READY;
             list_insert_ordered(&ready_list, &t->elem, priority_cmp_func, NULL);
-            printf("Wake up thread %s at tick %lld.\n", t->name, cur_ticks);
+//            printf("Wake up thread %s at tick %lld.\n", t->name, cur_ticks);
         }
         e = list_next(e);
         intr_set_level(old_level);

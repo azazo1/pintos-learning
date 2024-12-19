@@ -1,6 +1,8 @@
 #ifndef __LIB_USTAR_H
 #define __LIB_USTAR_H
 
+// ustar 的全称是: Unix Standard TAR.
+
 /* Support for the standard Posix "ustar" format.  See the
    documentation of the "pax" utility in [SUSv3] for the the
    "ustar" format specification. */
