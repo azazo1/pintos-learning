@@ -97,6 +97,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    uint32_t st_exit; // 线程退出状态 见 src/userprog/syscall.c.
 #endif
 
     /* Owned by thread.c. */

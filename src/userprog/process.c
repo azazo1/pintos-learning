@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -27,21 +28,36 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
 process_execute (const char *file_name) 
-{
+{ // 这里参数传递的测试需要在 src/tests/userprog/build 中 进行 make check.
+  char *fn_real;
   char *fn_copy;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  // 这里假定 file_name 对应的字符串大小远小于 4KiB.
+  fn_real = palloc_get_page (0); // palloc_get_page 应该分配 4KiB 的页面内存.
+  fn_copy = palloc_get_page(0);
+  if (fn_real == NULL || fn_copy == NULL)
     return TID_ERROR;
+  strlcpy (fn_real, file_name, PGSIZE);
   strlcpy (fn_copy, file_name, PGSIZE);
+  char *save_ptr;
+  fn_real = strtok_r(fn_real, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  // 这里创建了一个子线程, 但是要确保此方法 process_execute 在子线程方法 start_process 结束之后才结束.
+  // 于是需要通过信号量进行同步, 于是这里需要传递信号量, 我把信号量放到 fn_copy 对应的页面里面, 具体是放在参数字符串(file_name)的末尾之后.
+  struct semaphore*sema = (struct semaphore*) (fn_copy + strlen(fn_copy) + 1);
+  sema_init(sema, 0);
+  // 这里的 fn_real 传给 thread_create 只是用来做线程的名称的, 只要线程还在运行,
+  // 那么这个名称字符串就保持有效, 不用释放.
+  tid = thread_create (fn_real, PRI_DEFAULT, start_process, fn_copy);
+  if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
+    palloc_free_page (fn_real); 
+  }
+  sema_down(sema);
   return tid;
 }
 
@@ -51,8 +67,15 @@ static void
 start_process (void *file_name_)
 {
   char *file_name = file_name_;
+  struct semaphore*sema = (struct semaphore*) (file_name + strlen(file_name) + 1);
+  char *fn_copy = palloc_get_page(0);
   struct intr_frame if_;
   bool success;
+
+  strlcpy(fn_copy, file_name, strlen(file_name) + 1);
+
+  char *save_ptr;
+  file_name = strtok_r(file_name, " ", &save_ptr); // get real filename.
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -62,9 +85,50 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
+  if (!success)  {
+    palloc_free_page (file_name); // 这个不能放外面, 因为 file_name 后面还有一个 sema 变量在下面要使用(load成功时要使用).
     thread_exit ();
+  }
+
+  // build stack.
+  int argc = 0;
+  int argv[32]; // max number of args is 32.
+  char *token;
+  for (token = strtok_r(fn_copy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+    if_.esp -= (strlen(token) + 1); // esp give space to token(arg).
+    memcpy(if_.esp, token, strlen(token) + 1); // copy arg to stack.
+    argv[argc] = (int) if_.esp; // record address of arg
+    argc++;
+  }
+  // push address of args into stack.
+  void **esp = &if_.esp; // 对 esp 局部变量的操作会反映到 if_.esp 上.
+  // *esp 可以看成是一个整形, 其含义是 if_.esp 这个指针的储存值.
+  *esp = (void *)((int) *esp & 0xfffffffc); // align 4 byte
+
+  // 放置字符串指针数组 argv.
+  *esp -= 4; // 分配 4 个字节.
+  *(int*) *esp = 0; // 这四个字节内容清零, 充当指针数组的结尾元素.
+  for (int i = argc - 1; i >= 0; --i) { // 放置指针数组.
+      *esp -= 4; // 分配一个指针大小.
+      // argv 中存放的是各个参数字符串的起始地址, 这些字符串是通过 palloc_get_page 分配的.
+      *(int*) *esp = argv[i]; // 修改数组指针元素指向的地址.
+  }
+
+  // 放置 argv 数组地址, 这个的必要性在于传给进程的参数中不方便传一整个数组, 传入数组的指针会方便一些.
+  *esp -= 4; // 再分配四个字节.
+  *(int*) *esp = (int) *esp + 4; // 让这四个字节充当指针, 指向字符串指针数组(argv)的开始位置.
+
+  // 放置 argc 位置.
+  *esp -= 4;
+  *(int*) *esp = argc;
+
+  // 放置 return 地址, 由于是进程的栈底, 没有返回地址, 返回地址为 0.
+  *esp -= 4;
+  *(int*) *esp = 0;
+
+  // 释放信号量.
+  sema_up(sema);
+  palloc_free_page (file_name); // 释放页(sema 在这个页之中, 所以在这里释放).
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -97,6 +161,8 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  // 输出退出状态.
+  printf("%s: exit(%d)\n", thread_name(), cur->st_exit);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
